@@ -103,20 +103,17 @@ with tab1:
         omega = 2 * np.pi * freqs
 
         if not use_cpe:
-            # Standard Randles: Z = Rs + Rct / (1 + j*w*Rct*Cdl)
             denom = 1 + (omega * rct_val * cdl_val) ** 2
             z_real = rs_val + (rct_val / denom)
             z_imag = (omega * rct_val**2 * cdl_val) / denom
         else:
-            # CPE Impedance: Z_cpe = 1 / [Q * (j*w)^n]
-            # Parallel: Y_parallel = 1/Rct + Q * (j*w)^n
-            q_val = cdl_val  # effective magnitude
+            q_val = cdl_val
             y_parallel = (1.0 / rct_val) + q_val * (omega**n_cpe) * (np.cos(n_cpe * np.pi / 2) + 1j * np.sin(n_cpe * np.pi / 2))
             z_parallel = 1.0 / y_parallel
             z_real = rs_val + z_parallel.real
             z_imag = -z_parallel.imag
 
-        # Calculate Single Probe Point
+        # Probe Point
         if not use_cpe:
             d_p = 1 + (w_probe * rct_val * cdl_val) ** 2
             zp_real = rs_val + (rct_val / d_p)
@@ -127,13 +124,11 @@ with tab1:
             zp_real = rs_val + zp.real
             zp_imag = -zp.imag
 
-        # Semicircle Nyquist & Bode plots
         fig_t1 = make_subplots(
             rows=1, cols=2,
             subplot_titles=("Nyquist Plot ($Z'$ vs. $-Z''$)", "Bode Plot (Phase Angle $\\theta$ vs. Frequency)")
         )
 
-        # 1. Nyquist
         fig_t1.add_trace(go.Scatter(
             x=z_real, y=z_imag, mode='lines',
             line=dict(color='#00d2ff', width=3),
@@ -147,7 +142,6 @@ with tab1:
             name="Selected Frequency"
         ), row=1, col=1)
 
-        # 2. Bode Phase
         phase_deg = np.degrees(np.arctan2(z_imag, z_real - rs_val))
         probe_phase = np.degrees(np.arctan2(zp_imag, zp_real - rs_val))
 
@@ -176,11 +170,8 @@ with tab1:
         )
         st.plotly_chart(fig_t1, use_container_width=True)
 
-        # Current Split Analysis at Selected Frequency
-        # Z_c = 1 / (j*w*Cdl); Z_rct = Rct
+        # Current Split
         z_c_mag = 1.0 / (w_probe * cdl_val)
-        # Fractional current through Cdl vs Rct:
-        # I_c / I_total = Z_rct / (Z_c + Z_rct)
         i_c_frac = rct_val / np.sqrt(rct_val**2 + z_c_mag**2)
         i_r_frac = z_c_mag / np.sqrt(rct_val**2 + z_c_mag**2)
 
@@ -188,7 +179,7 @@ with tab1:
         **Current Distribution at current frequency ($f = {f_probe:.2f}\\ \\text{{Hz}}$):**
         * **Capacitive Route ($C_{{dl}}$):** `{i_c_frac*100.0:.1f}%` of the AC current is charging/discharging the double layer.
         * **Faradaic Route ($R_{{ct}}$):** `{i_r_frac*100.0:.1f}%` of the AC current is transferring electrons across the interface.
-        * **Physical Interpretation:** At high frequencies, the double layer acts as an electrical bypass (short), leaving only $R_s$. At low frequencies, the double layer blocks charge, forcing current across $R_{ct}$ ($Z' \\rightarrow R_s + R_{ct}$).
+        * **Physical Interpretation:** At high frequencies, the double layer acts as an electrical bypass (short), leaving only $R_s$. At low frequencies, the double layer blocks charge, forcing current across $R_{{ct}}$ ($Z' \\rightarrow R_s + R_{{ct}}$).
         """)
 
 # =============================================================================
@@ -226,7 +217,6 @@ with tab2:
             )
         )
 
-        # 1. Potential Step i(t) = (E/Rs) * exp(-t / Rs*Cdl) + E / (Rs + Rct)
         tau_s = u_rs * u_cdl
         t_arr = np.linspace(0, 5 * tau_s, 300)
         v_step = v_step_mv * 1e-3
@@ -237,7 +227,6 @@ with tab2:
             line=dict(color='#e74c3c', width=2.5), name="Step Current"
         ), row=1, col=1)
 
-        # 2. Linear Sweep i(t) = v*Cdl * [1 - exp(-t / Rs*Cdl)]
         t_ramp = np.linspace(0, 8 * tau_s, 300)
         i_ramp = scan_rate_vs * u_cdl * (1 - np.exp(-t_ramp / tau_s))
         fig_bridge.add_trace(go.Scatter(
@@ -245,7 +234,6 @@ with tab2:
             line=dict(color='#3498db', width=2.5), name="Ramp Charging"
         ), row=1, col=2)
 
-        # 3. Cyclic Voltammetry Hysteresis Box: forward and reverse
         e_range = np.linspace(0, 0.8, 300)
         i_ss_pos = scan_rate_vs * u_cdl * 1e6
         i_ss_neg = -scan_rate_vs * u_cdl * 1e6
@@ -256,7 +244,6 @@ with tab2:
             line=dict(color='#2ecc71', width=2), name="CV Hysteresis Box"
         ), row=2, col=1)
 
-        # 4. Semicircle Nyquist
         w_bridge = np.logspace(-1, 6, 200)
         denom_b = 1 + (w_bridge * u_rct * u_cdl) ** 2
         zb_re = u_rs + (u_rct / denom_b)
@@ -331,26 +318,22 @@ with tab3:
         w_freqs = np.logspace(-2, 5, 400)
         w_omega = 2 * np.pi * w_freqs
 
-        # Calculate Warburg component
         if "Semi-Infinite" in diffusion_mode:
             z_w_real = sigma_w / np.sqrt(w_omega)
             z_w_imag = sigma_w / np.sqrt(w_omega)
         elif "Transmissive" in diffusion_mode:
-            # Z_w = R_d * tanh( (j*w*tau_d)^0.5 ) / (j*w*tau_d)^0.5
             r_d = sigma_w * np.sqrt(2 * tau_diff)
             arg = np.sqrt(1j * w_omega * tau_diff)
             zw_trans = r_d * np.tanh(arg) / arg
             z_w_real = zw_trans.real
             z_w_imag = -zw_trans.imag
-        else:  # Reflective
-            # Z_w = R_d * coth( (j*w*tau_d)^0.5 ) / (j*w*tau_d)^0.5
+        else:
             r_d = sigma_w * np.sqrt(2 * tau_diff)
             arg = np.sqrt(1j * w_omega * tau_diff)
             zw_refl = r_d / (arg * np.tanh(arg))
             z_w_real = zw_refl.real
             z_w_imag = -zw_refl.imag
 
-        # Total Randles Impedance: Z = Rs + 1 / [ j*w*Cdl + 1 / (Rct + Zw) ]
         z_faradaic = (w_rct + z_w_real) - 1j * z_w_imag
         y_total = 1j * w_omega * w_cdl + (1.0 / z_faradaic)
         z_interface = 1.0 / y_total
@@ -409,15 +392,12 @@ with tab4:
     with col_t4_p:
         d_range_cm = np.linspace(0.005, 1.5, 300)
 
-        # 1. Planar
         ru_planar = d_range_cm / kappa
-        j_ru_planar = (j_curr * ru_planar) * 1e3  # mV
+        j_ru_planar = (j_curr * ru_planar) * 1e3
 
-        # 2. Cylindrical
         ru_cyl = (r0 / kappa) * np.log(1 + d_range_cm / r0)
         j_ru_cyl = (j_curr * ru_cyl) * 1e3
 
-        # 3. Spherical
         ru_sph = (d_range_cm / kappa) * (r0 / (r0 + d_range_cm))
         j_ru_sph = (j_curr * ru_sph) * 1e3
 
@@ -426,7 +406,6 @@ with tab4:
         fig_geom.add_trace(go.Scatter(x=d_range_cm * 10, y=j_ru_cyl, mode='lines', line=dict(color='#f39c12', width=3), name=f"Cylindrical Wire (r₀ = {r0_wire_mm:.2f} mm)"))
         fig_geom.add_trace(go.Scatter(x=d_range_cm * 10, y=j_ru_sph, mode='lines', line=dict(color='#2ecc71', width=3), name=f"Spherical Drop (r₀ = {r0_wire_mm:.2f} mm)"))
 
-        # Mark selected point
         p_val_pl = (j_curr * (d_probe / kappa)) * 1e3
         p_val_cy = (j_curr * (r0 / kappa) * np.log(1 + d_probe / r0)) * 1e3
         p_val_sp = (j_curr * (d_probe / kappa) * (r0 / (r0 + d_probe))) * 1e3
@@ -488,18 +467,15 @@ with tab5:
         r_gb = st.number_input("Grain Boundary Resistance ($R_{gb}$, $\\Omega$):", value=85000.0, step=1000.0)
 
     with col_t5_out:
-        # Calculations
         area_cm2 = np.pi * ((pellet_diam_mm / 2.0) / 10.0) ** 2
         thick_cm = pellet_thick_um * 1e-4
         vol_pellet_cm3 = area_cm2 * thick_cm
 
-        # Densities
         n_a = 6.02214e23
-        rho_th = (6.0 * mw_material) / (n_a * (v_uc_ang3 * 1e-24))  # g/cm^3
+        rho_th = (6.0 * mw_material) / (n_a * (v_uc_ang3 * 1e-24))
         rho_exp = (pellet_mass_mg * 1e-3) / vol_pellet_cm3
         porosity_fraction = rho_exp / rho_th
 
-        # Conductivities
         r_total = r_bulk + r_gb
         sigma_bulk_raw = thick_cm / (r_bulk * area_cm2)
         sigma_total_raw = thick_cm / (r_total * area_cm2)
